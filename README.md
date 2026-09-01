@@ -1,4 +1,4 @@
-# Custom Single Shot MultiBox Detector (SSD) using MobileNetV2
+# Multi-Class Traffic Object Detection
 
 A lightweight, end-to-end custom Object Detection pipeline built using TensorFlow/Keras and FiftyOne. This project trains a tailored Single Shot Detector (SSD) head on top of a transfer-learned MobileNetV2 backbone to detect two specific target classes: **Persons** and **Cars**.
 
