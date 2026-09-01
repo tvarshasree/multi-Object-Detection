@@ -1,42 +1,50 @@
-# Multi-Class Traffic Object Detection
+# Multi-Class Detection & Density Analytics
 
-A lightweight, end-to-end custom Object Detection pipeline built using TensorFlow/Keras and FiftyOne. This project trains a tailored Single Shot Detector (SSD) head on top of a transfer-learned MobileNetV2 backbone to detect two specific target classes: **Persons** and **Cars**.
-
-The system features highly optimized parallel data streaming via `tf.data`, custom anchor-based spatial feature mapping, and Non-Maximum Suppression (NMS) post-processing.
+An end-to-end computer vision and traffic analytics application that performs multi-class object detection, vehicle/pedestrian counting, road-occupancy estimation, and real-time congestion classification from uploaded images.
 
 ---
 
-## 🚀 Key Features
+## 📌 Features
 
-* **Automated Dataset Pipeline:** Streamlined ingestion, sub-sampling, and class-balancing using the Open Images V6 dataset via the FiftyOne Zoo.
-* **Hardware-Optimized Streaming:** Uses `tf.data.Dataset` multi-threading asynchronously (`AUTOTUNE`) to perform on-the-fly decoding, resizing, and float normalization.
-* **Custom Object Detection Head:** Replaces standard classification layers with parallel 2D-Convolutional Local Spatial Detectors for regression (bounding boxes) and classification (labels).
-* **Advanced Evaluation Suite:** Automated generation of Huber/Cross-Entropy convergence graphs, Scikit-Learn classification reports, and automated Confusion Matrix heatmaps.
-* **NMS Post-Processing:** Built-in Non-Maximum Suppression (`tf.image.non_max_suppression`) to filter overlapping predictions and eliminate background noise.
+- **Multi-Class Detection:** Detects only 4 key traffic classes: `Person`, `Car`, `Bus`, and `Motorcycle / Two-Wheeler`.
+- **Targeted Counting:** Separates pedestrian counts from total motorized vehicle counts.
+- **Traffic Density Estimation:** Uses Passenger Car Equivalent (PCE) weighted scoring alongside bounding box area coverage.
+- **Congestion Level Classification:** Automatically categorizes traffic status as **Low**, **Medium**, or **High**.
+- **Interactive Dashboard:** Upload UI, visual bounding-box overlays, KPI metric cards, and class distribution charts.
+
+---
+## 🛠️ Tech Stack
+
+- **Model:** Ultralytics YOLOv8 / YOLOv11 (`yolov8n.pt` / `yolov11n.pt`)
+- **Backend / Engine:** Python 3.10+, PyTorch, OpenCV (`cv2`)
+- **Frontend / Dashboard:** Streamlit (or FastAPI + React)
+- **Data Visualization:** Plotly / Matplotlib
 
 ---
 
-## 🏗️ Architectural Design & Implementation
+## 🧮 Congestion Classification Logic
 
-The architecture leverages a hybrid transfer-learning approach combined with a customized anchor-free MultiBox prediction layer.
+The system computes a **Passenger Car Equivalent (PCE) Score ($S$)** to account for differing road-space occupancy:
 
-### 1. Feature Extractor (Backbone)
-* **Base Network:** MobileNetV2 pre-trained on ImageNet.
-* **Fine-Tuning Strategy:** Partial freezing. The foundational layers (edges, textures) are locked, while the top **40 layers** are unfrozen to allow the network to specialize in the geometries of custom target classes.
+$$S = (1.0 \times N_{\text{car}}) + (0.5 \times N_{\text{motorcycle}}) + (2.5 \times N_{\text{bus}})$$
 
-### 2. Multi-Task Detection Heads
-The network splits into two simultaneous functional heads handling spatial outputs up to 10 object slots per image:
-* **Bounding Box Regression:** Employs a 2D Convolutional layer mapped via a Global Average Pool upsampling matrix to output 4 normalized coordinate vectors $(y_{min}, x_{min}, y_{max}, x_{max})$ per object slot using a Sigmoid activation.
-* **Classification:** Maps class logits directly through a Softmax layer across the targeted classes.
+| Congestion Level | PCE Score ($S$) | Road Coverage Area | Visual Indicator |
+|---|---|---|---|
+| **Low** (Free Flow) | $S < 5$ | $< 15\%$ | 🟢 Green |
+| **Medium** (Moderate) | $5 \le S < 12$ | $15\% - 35\%$ | 🟡 Yellow |
+| **High** (Congested) | $S \ge 12$ | $> 35\%$ | 🔴 Red |
 
 ---
 
-## 🛠️ Installation & Setup
+## 🚀 Quick Start
 
-### Prerequisites
-Before running the pipeline, ensure you have your Kaggle API Token available for dataset authentication. 
+### 1. Clone Repository & Setup Virtual Environment
+```bash
+git clone [https://github.com/your-username/traffic-density-analytics.git](https://github.com/your-username/traffic-density-analytics.git)
+cd traffic-density-analytics
 
-1. Clone this repository:
-   ```bash
-   git clone [https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git](https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git)
-   cd YOUR_REPO_NAME
+python -m venv venv
+# On Windows:
+venv\Scripts\activate
+# On macOS/Linux:
+source venv/bin/activate
