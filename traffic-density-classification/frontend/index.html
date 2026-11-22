@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Traffic Density and Congestion Classification System</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Top App Bar -->
+        <header class="app-header">
+            <div class="brand-group">
+                <div class="brand-icon">🚦</div>
+                <div>
+                    <h1>Traffic Density and Congestion Classification System</h1>
+                    <p class="subtitle">AI-based vehicle detection and traffic density analysis using YOLO11</p>
+                </div>
+            </div>
+            <div class="header-status">
+                <span id="backendBadge" class="status-pill status-loading">Connecting...</span>
+                <span class="status-pill model-tag">YOLO11 Detection</span>
+            </div>
+        </header>
+
+        <!-- Main Content Grid -->
+        <main class="dashboard-grid">
+            <!-- Left Pane: Upload & Analysis Controls -->
+            <section class="panel upload-panel">
+                <div class="panel-header">
+                    <h2>Image Upload & Controls</h2>
+                    <span class="badge-sub">JPG, PNG, WebP (Max 25MB)</span>
+                </div>
+
+                <!-- Dropzone -->
+                <div class="dropzone" id="dropArea">
+                    <div class="dropzone-content">
+                        <span class="drop-icon">📷</span>
+                        <p class="drop-text">Drag and drop traffic image here</p>
+                        <p class="drop-sub">or click to browse from device</p>
+                        <input type="file" id="fileInput" accept="image/*" style="display: none;">
+                        <button type="button" class="btn btn-secondary" onclick="document.getElementById('fileInput').click()">
+                            Browse Image
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Upload Preview & Action -->
+                <div id="previewCard" class="preview-card" style="display: none;">
+                    <div class="preview-header">
+                        <span id="previewFilename" class="preview-name">image.jpg</span>
+                        <button id="btnRemovePreview" class="btn-text">Remove</button>
+                    </div>
+                    <div class="preview-thumb-container">
+                        <img id="imagePreview" alt="Upload Preview">
+                    </div>
+                    <button id="btnAnalyze" class="btn btn-primary btn-full">
+                        <span class="btn-icon">⚡</span> Analyze Traffic
+                    </button>
+                </div>
+
+                <!-- Processing State -->
+                <div id="processingSection" class="processing-section" style="display: none;">
+                    <div class="spinner"></div>
+                    <p id="processingStatusText" class="processing-text">Executing YOLO11 inference pipeline...</p>
+                </div>
+
+                <!-- Error Toast -->
+                <div id="errorToast" class="error-toast" style="display: none;">
+                    <span class="error-icon">⚠️</span>
+                    <span id="errorMessage">Error processing image.</span>
+                </div>
+
+                <!-- Model Information Summary Card -->
+                <div class="info-card">
+                    <h3>Classification Model Reference</h3>
+                    <ul class="info-list">
+                        <li><strong>Backbone:</strong> Ultralytics YOLO11</li>
+                        <li><strong>Target Classes:</strong> Person (0), Car (1), Bus (2), Motorcycle (3)</li>
+                        <li><strong>Density Categories:</strong> Low (≤ 5), Medium (6 - 12), High (> 12)</li>
+                        <li><strong>Pedestrian Policy:</strong> Isolated from vehicular congestion counts</li>
+                    </ul>
+                </div>
+            </section>
+
+            <!-- Right Pane: Results Dashboard -->
+            <section class="panel results-panel">
+                <div class="panel-header">
+                    <h2>Analysis Results Dashboard</h2>
+                    <div id="latencyBadge" class="latency-badge" style="display: none;">0.0 ms</div>
+                </div>
+
+                <!-- Empty State Placeholder -->
+                <div id="emptyState" class="empty-state">
+                    <div class="empty-icon">📊</div>
+                    <h3>No Traffic Image Analyzed Yet</h3>
+                    <p>Upload a roadway or intersection photo and click <strong>Analyze Traffic</strong> to view detections, counts, and density classification.</p>
+                </div>
+
+                <!-- Live Results View -->
+                <div id="resultsDashboard" class="results-dashboard" style="display: none;">
+                    <!-- Traffic Density Status Banner -->
+                    <div id="densityBanner" class="density-banner density-low">
+                        <div class="banner-top">
+                            <span class="density-label">TRAFFIC DENSITY:</span>
+                            <span id="densityCategory" class="density-value">LOW</span>
+                        </div>
+                        <p id="densityExplanation" class="density-desc">Analyzing traffic conditions...</p>
+                    </div>
+
+                    <!-- KPI Statistics Grid -->
+                    <div class="kpi-grid">
+                        <div class="kpi-box primary">
+                            <span class="kpi-title">Total Detected Objects</span>
+                            <span id="kpiTotal" class="kpi-num">0</span>
+                        </div>
+                        <div class="kpi-box vehicle">
+                            <span class="kpi-title">Vehicles (Car+Bus+Moto)</span>
+                            <span id="kpiVehicles" class="kpi-num">0</span>
+                        </div>
+                        <div class="kpi-box pedestrian">
+                            <span class="kpi-title">Pedestrians (Person)</span>
+                            <span id="kpiPedestrians" class="kpi-num">0</span>
+                        </div>
+                    </div>
+
+                    <!-- Breakdown Numbers Grid -->
+                    <div class="class-counts-grid">
+                        <div class="class-count-item">
+                            <span class="class-name">🚗 Cars</span>
+                            <span id="countCar" class="class-val">0</span>
+                        </div>
+                        <div class="class-count-item">
+                            <span class="class-name">🚌 Buses</span>
+                            <span id="countBus" class="class-val">0</span>
+                        </div>
+                        <div class="class-count-item">
+                            <span class="class-name">🏍️ Motorcycles</span>
+                            <span id="countMotorcycle" class="class-val">0</span>
+                        </div>
+                        <div class="class-count-item">
+                            <span class="class-name">🚶 Persons</span>
+                            <span id="countPerson" class="class-val">0</span>
+                        </div>
+                    </div>
+
+                    <!-- Class Distribution Visualizer -->
+                    <div class="chart-container">
+                        <h3>Class Distribution</h3>
+                        <div class="bar-chart-row">
+                            <span class="bar-label">Car</span>
+                            <div class="bar-track"><div id="barCar" class="bar-fill fill-car" style="width: 0%;"></div></div>
+                            <span id="barCarNum" class="bar-count">0</span>
+                        </div>
+                        <div class="bar-chart-row">
+                            <span class="bar-label">Bus</span>
+                            <div class="bar-track"><div id="barBus" class="bar-fill fill-bus" style="width: 0%;"></div></div>
+                            <span id="barBusNum" class="bar-count">0</span>
+                        </div>
+                        <div class="bar-chart-row">
+                            <span class="bar-label">Motorcycle</span>
+                            <div class="bar-track"><div id="barMoto" class="bar-fill fill-moto" style="width: 0%;"></div></div>
+                            <span id="barMotoNum" class="bar-count">0</span>
+                        </div>
+                        <div class="bar-chart-row">
+                            <span class="bar-label">Person</span>
+                            <div class="bar-track"><div id="barPerson" class="bar-fill fill-person" style="width: 0%;"></div></div>
+                            <span id="barPersonNum" class="bar-count">0</span>
+                        </div>
+                    </div>
+
+                    <!-- Image Comparison Views -->
+                    <div class="image-viewer-section">
+                        <h3>Detection Visualization</h3>
+                        <div class="image-comparison-grid">
+                            <div class="img-box">
+                                <span class="img-box-label">Annotated YOLO11 Output</span>
+                                <img id="annotatedImageView" alt="Annotated Traffic Detections">
+                            </div>
+                            <div class="img-box">
+                                <span class="img-box-label">Original Image</span>
+                                <img id="originalImageView" alt="Original Input">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="/static/script.js"></script>
+</body>
+</html>
