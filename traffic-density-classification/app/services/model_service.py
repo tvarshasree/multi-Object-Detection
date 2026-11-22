@@ -9,6 +9,12 @@ from pathlib import Path
 from typing import Dict, Any, List, Tuple
 import numpy as np
 
+# Point Ultralytics config to workspace to avoid Windows AppData permissions
+workspace_root = Path(__file__).resolve().parent.parent.parent
+ultralytics_dir = workspace_root / ".ultralytics"
+ultralytics_dir.mkdir(parents=True, exist_ok=True)
+os.environ["YOLO_CONFIG_DIR"] = str(ultralytics_dir)
+
 from app.config import settings
 from app.schemas import DetectionItem, BoundingBox
 

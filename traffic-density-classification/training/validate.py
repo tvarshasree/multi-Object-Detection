@@ -9,6 +9,12 @@ import sys
 import argparse
 from pathlib import Path
 
+# Point Ultralytics config to workspace to avoid Windows AppData permissions
+workspace_root = Path(__file__).resolve().parent.parent
+ultralytics_dir = workspace_root / ".ultralytics"
+ultralytics_dir.mkdir(parents=True, exist_ok=True)
+os.environ["YOLO_CONFIG_DIR"] = str(ultralytics_dir)
+
 
 def run_validation(
     model_path: str = "weights/best.pt",
