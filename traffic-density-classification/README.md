@@ -1,266 +1,234 @@
-# TrafficVision: Real-Time Traffic Density & Congestion Classification Using YOLO11
+# TrafficVision: Real-Time Traffic Density and Congestion Classification
 
-[![Python 3.10](https://img.shields.io/badge/Python-3.10-blue.svg)](https://www.python.org/)
-[![YOLO11](https://img.shields.io/badge/Model-Ultralytics_YOLO11-00FFFF.svg)](https://docs.ultralytics.com/)
-[![FastAPI](https://img.shields.io/badge/Backend-FastAPI-009688.svg)](https://fastapi.tiangolo.com/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+TrafficVision is a vision-based traffic monitoring and density classification system built with Ultralytics YOLO11 and FastAPI. It processes roadway images to detect key road users, separate pedestrian counts from vehicular traffic, and classify overall traffic congestion into Low, Medium, or High states.
 
-An end-to-end, vision-only deep learning system designed to monitor urban roadway traffic, count road users, isolate pedestrian foot traffic from vehicular volume, and classify instantaneous traffic density into **Low**, **Medium**, or **High** states.
+## Key Features
 
-**Author:** Varshasree Tadiparthi (M.Tech 2nd Year, Computer Science & Data Processing, Roll: 25MA60R37)  
-**Primary Reference:** Student Project Report (*TrafficVision*)  
-**Reference Paper:** D. Maladkar et al., *"Traffic Flow Detection and Prediction Using YOLO11: A Threshold-Based Approach for Identifying Traffic Levels"*, INCOFT 2025 ([SCITEPRESS 135920](https://www.scitepress.org/Papers/2025/135920/135920.pdf)).
+- Multi-Class Detection: Detects four targeted road-user classes: Person (0), Car (1), Bus (2), and Motorcycle (3).
+- Pedestrian Segregation: Tracks pedestrian counts independently from vehicular counts to avoid false congestion alerts at pedestrian crossings or sidewalks.
+- Three-Tier Classification: Categorizes road traffic density as Low, Medium, or High using configurable vehicle-count thresholds.
+- Dual-Mode Serving: Operates with fine-tuned custom weights (`weights/best.pt`) or falls back to pretrained YOLO11 weights (`yolo11n.pt`) using an internal COCO class mapping layer.
+- Modular FastAPI Service: Provides REST endpoints for health checks, model metadata, image inference, and annotated image retrieval.
+- OpenCV Visualization: Generates annotated output images with class-colored bounding boxes and a top heads-up display (HUD) banner showing active counts and status.
+- Web Dashboard: Includes a responsive browser interface for drag-and-drop image uploads, live KPI cards, and instant visual feedback.
+- Dataset and Evaluation Tools: Provides validation and statistics scripts for YOLO-formatted datasets, training workflows, and report generation.
+- Automated Tests: Contains unit and integration tests for API endpoints, counting logic, classification rules, and dataset formatting.
 
----
+## Target Classes and Classification Rules
 
-## 1. Project Overview & Problem Statement
+### Class Definitions
 
-Urban traffic congestion results in severe economic losses, air pollution, and fuel wastage. Conventional traffic monitoring infrastructure relies on expensive sensors such as inductive loops embedded in pavement or radar counters, requiring high installation and maintenance expenditures. Surveillance cameras are already ubiquitous in urban centers, but they lack autonomous visual intelligence to quantify traffic states.
+The model targets four road-user classes:
+- Person (0): Pedestrians, cyclists, and individuals on foot.
+- Car (1): Passenger vehicles including sedans, hatchbacks, SUVs, and taxis.
+- Bus (2): Public transit buses and coaches.
+- Motorcycle (3): Two-wheelers, scooters, and motorcycles.
 
-**TrafficVision** bridges this gap by converting standard roadway video and image feeds into structured, actionable traffic intelligence.
+### Counting and Segregation Logic
 
-### Key Objectives
-1. **Multi-Class Road-User Detection**: Accurately detect four essential classes: **Person (0)**, **Car (1)**, **Bus (2)**, and **Motorcycle (3)** using the modern **YOLO11** architecture.
-2. **Pedestrian Segregation**: Unlike traditional systems that count all detected bounding boxes indiscriminately, TrafficVision separates pedestrian volume from vehicle volume. Pedestrian-heavy crosswalks will **never** trigger false vehicular congestion alerts.
-3. **Three-Tier Density Classification**: Classify vehicular congestion into actionable levels: `Low`, `Medium`, or `High` using calibrated threshold bounds ($T_1, T_2$).
-4. **Full-Stack Serving Layer**: Deliver results via an asynchronous **FastAPI** service and a responsive web dashboard with live heads-up display (HUD) visualization.
+The system aggregates detections as follows:
+- vehicle_count = car_count + bus_count + motorcycle_count
+- pedestrian_count = person_count
+- total_objects = vehicle_count + pedestrian_count
 
----
+Pedestrians are counted separately from motorized vehicles so that foot traffic along sidewalks or crosswalks does not inflate vehicular congestion indicators.
 
-## 2. Target Benchmark Results (Report Table 4.1)
+### Congestion Thresholds
 
-The system targets reproduction of the validation performance metrics established in Chapter 4 of the project report:
+Traffic density is assigned using the following rules:
+- Low: vehicle_count <= 5. The roadway has light traffic and free flow.
+- Medium: 5 < vehicle_count <= 12. The roadway has moderate traffic with steady movement.
+- High: vehicle_count > 12. The roadway has heavy traffic and noticeable congestion.
 
-| Object Class | Precision (%) | Recall (%) | mAP@0.5 |
-| :--- | :---: | :---: | :---: |
-| **Car** | 80.5% | 81.0% | 0.81 |
-| **Bus** | 81.2% | 82.5% | 0.78 |
-| **Motorcycle / Two-Wheeler** | 79.8% | 78.5% | 0.73 |
-| **Person (Pedestrian)** | 78.5% | 78.2% | 0.69 |
-| **Overall / Aggregate** | **81.8%** | **80.05%** | **0.75** |
+The threshold values (T1 = 5, T2 = 12) can be adjusted in the environment configuration.
 
-### Benchmark Comparison (Report Table 3.1)
+## System Architecture
 
-| Dimension | Maladkar et al. (2025) [1] | Shreya & Sunith Kumar [2] | TrafficVision (This Work) |
-| :--- | :---: | :---: | :---: |
-| **Backbone** | YOLO11 | YOLOv8 | **YOLO11** |
-| **Classes** | 8 classes | 4 classes | **4 target classes** |
-| **Serving Layer** | Not specified | Flask | **FastAPI + Uvicorn** |
-| **Congestion Levels** | 2 (`Heavy` / `Light`) | 3 (`Low` / `Moderate` / `High`) | **3 (`Low` / `Medium` / `High`)** |
-| **Pedestrian Segregation** | Mixed with vehicles | Not detected | **Explicitly segregated** |
-| **Precision** | 0.88 | 0.925 | **0.818 (81.8%)** |
-| **Recall** | 0.85 | 0.927 | **0.8005 (80.05%)** |
-| **mAP@0.5** | 0.773 | 0.970 | **0.750 (75.0%)** |
+The request workflow follows a sequential, modular pipeline:
 
----
+1. Client Request: An image is submitted via the web dashboard or directly to the `/predict` endpoint.
+2. Validation: The upload is checked for allowed image types (JPEG, PNG, WebP), file size limits, and basic integrity.
+3. Inference: The YOLO11 model detects objects and returns bounding boxes, class labels, and confidence scores.
+4. Counting and Segregation: Detected objects are split into pedestrian and vehicle counts.
+5. Density Classification: The vehicle count is evaluated against configured thresholds to assign a congestion level.
+6. HUD Rendering: OpenCV draws high-contrast bounding boxes and superimposes a top HUD banner with status and metrics.
+7. Response: The API returns structured JSON metrics along with a URL pointing to the annotated image.
 
-## 3. System Architecture
-
-```
-User / Client Browser
-       |
-       v
-Frontend Web Dashboard (HTML5 / Modern CSS / Vanilla JS)
-       |
-       v
-FastAPI Asynchronous Gateway
-       |
-       +---> [GET  /health]               -> System & Model Diagnostics
-       +---> [GET  /model-info]           -> Architecture & Threshold Metadata
-       +---> [GET  /results/{filename}]   -> Annotated Image Asset Delivery
-       +---> [POST /predict]              -> Full Pipeline Execution:
-                   |
-                   v
-             Image Validator & Preprocessor (utils/validation.py)
-                   |
-                   v
-             YOLO11 Detection Engine (services/model_service.py)
-                   |
-                   +---> Object Counter (services/counting_service.py)
-                   |         - Computes N_car, N_bus, N_motorcycle -> Vehicle Count
-                   |         - Computes N_person                   -> Pedestrian Count
-                   |
-                   +---> Traffic Classifier (services/classification_service.py)
-                   |         - Low:    vehicle_count <= 5
-                   |         - Medium: 5 < vehicle_count <= 12
-                   |         - High:   vehicle_count > 12
-                   |
-                   +---> HUD Renderer (utils/image_utils.py)
-                             - Draws high-contrast bounding boxes
-                             - Injects top status HUD banner
-                             - Encodes JPEG output to disk
-```
-
----
-
-## 4. Project Directory Layout
+## Directory Structure
 
 ```
 traffic-density-classification/
-├── app/
-│   ├── main.py                     # FastAPI application entrypoint & routing
-│   ├── config.py                   # Pydantic environment configuration
-│   ├── schemas.py                  # Pydantic request/response data models
-│   ├── dependencies.py             # Service singletons & dependency injection
-│   ├── routes/
-│   │   ├── prediction.py           # /predict and /results/{filename} endpoints
-│   │   ├── health.py               # /health status endpoint
-│   │   └── model_info.py           # /model-info metadata endpoint
-│   ├── services/
-│   │   ├── model_service.py        # YOLO11 inference wrapper & class filtering
-│   │   ├── detection_service.py    # End-to-end detection orchestrator
-│   │   ├── counting_service.py     # Class aggregation & vehicle/pedestrian separation
-│   │   └── classification_service.py # Three-tier density classification engine
-│   └── utils/
-│       ├── image_utils.py          # OpenCV decoding, HUD drawing, file saving
-│       └── validation.py           # File extension, MIME, size, path sanitization
-├── training/
-│   ├── train.py                    # YOLO11 fine-tuning pipeline
-│   ├── validate.py                 # Validation split evaluation
-│   └── evaluate.py                 # Benchmark reproducibility & report generation
-├── scripts/
-│   ├── validate_dataset.py         # YOLO annotation & directory structure validator
-│   └── dataset_statistics.py       # Dataset profiling & class distribution analysis
-├── frontend/
-│   ├── index.html                  # Responsive upload & metrics dashboard
-│   ├── style.css                   # Modern dark-mode styling
-│   └── script.js                   # Asynchronous fetch controller & UI updates
-├── dataset/
-│   ├── images/{train,val,test}/    # Roadway imagery
-│   ├── labels/{train,val,test}/    # Normalized YOLO format txt annotations
-│   └── data.yaml                   # Ultralytics dataset definition
-├── weights/
-│   └── best.pt                     # Target fine-tuned YOLO11 checkpoint
-├── outputs/
-│   ├── annotated/                  # Saved visual outputs
-│   └── reports/                    # Generated Markdown & metric reports
-├── tests/
-│   ├── test_dataset.py             # Unit tests for dataset validation
-│   ├── test_counting.py            # Unit tests for object counting logic
-│   ├── test_classification.py      # Unit tests for density classification
-│   └── test_api.py                 # Integration tests for FastAPI endpoints
-├── .env.example                    # Environment variable template
-├── .gitignore                      # Git exclusion rules
-├── requirements.txt                # Complete Python dependencies
-└── README.md                       # Master documentation
+  app/
+    main.py                       FastAPI application entrypoint and middleware
+    config.py                     Application settings and environment validation
+    dependencies.py               Service singleton management
+    schemas.py                    Pydantic request and response schemas
+    routes/
+      health.py                   Health check and diagnostic endpoint
+      model_info.py               Model configuration and metadata endpoint
+      prediction.py               Inference and annotated media endpoints
+    services/
+      model_service.py            YOLO11 wrapper with dual-mode class mapping
+      detection_service.py        End-to-end detection orchestration
+      counting_service.py         Vehicle and pedestrian counting logic
+      classification_service.py   Three-tier congestion classification
+    utils/
+      image_utils.py              OpenCV image decoding, HUD rendering, and saving
+      validation.py               File type, size, and integrity validation
+  frontend/
+    index.html                    Web dashboard layout
+    style.css                     Dashboard styling
+    script.js                     Client-side interaction and API communication
+  training/
+    train.py                      YOLO11 fine-tuning script
+    validate.py                   Validation dataset evaluation script
+    evaluate.py                   Benchmark evaluation and report generator
+  scripts/
+    validate_dataset.py           Dataset structure and annotation validator
+    dataset_statistics.py         Class distribution and dataset metrics
+  tests/
+    test_api.py                   FastAPI integration tests
+    test_classification.py        Density classification unit tests
+    test_counting.py              Counting service unit tests
+    test_dataset.py               Dataset schema and label format tests
+  dataset/
+    data.yaml                     Dataset configuration for Ultralytics
+  weights/
+    best.pt                       Target location for fine-tuned weights
+  requirements.txt                Python package dependencies
+  README.md                       Component documentation
 ```
 
----
-
-## 5. Installation & Environment Setup
+## Setup and Installation
 
 ### Prerequisites
-- Python 3.10 (Recommended: 3.10.x)
-- pip & virtualenv
-- (Optional) CUDA-enabled NVIDIA GPU for hardware acceleration
 
-### Step 1: Clone and Navigate
-```bash
-git clone https://github.com/tvarshasree/multi-Object-Detection.git
-cd od/traffic-density-classification
-```
+- Python 3.10 or higher
+- pip and virtualenv
+- Optional: CUDA-compatible GPU for accelerated training and inference
 
-### Step 2: Create and Activate Virtual Environment
-**On Windows (PowerShell):**
+### 1. Create and Activate Virtual Environment
+
+On Windows (PowerShell):
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 ```
 
-**On Linux / macOS:**
+On Linux or macOS:
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
 ```
 
-### Step 3: Install Dependencies
+### 2. Install Dependencies
+
 ```bash
 pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-### Step 4: Environment Configuration
-Copy `.env.example` to `.env`:
+### 3. Environment Configuration
+
+Copy the sample environment file:
+
 ```bash
 cp .env.example .env
 ```
 
----
+Available environment variables:
+- MODEL_PATH: Path to fine-tuned weights (default: `weights/best.pt`)
+- FALLBACK_MODEL_PATH: Pretrained fallback model (default: `yolo11n.pt`)
+- CONFIDENCE_THRESHOLD: Detection confidence threshold (default: `0.35`)
+- IOU_THRESHOLD: NMS intersection over union threshold (default: `0.45`)
+- IMAGE_SIZE: Input image dimension for inference (default: `640`)
+- DEVICE: Compute device, either `cpu` or `0` for GPU (default: `cpu`)
+- LOW_THRESHOLD: Upper limit for Low density (default: `5`)
+- MEDIUM_THRESHOLD: Upper limit for Medium density (default: `12`)
+- HOST: Server bind address (default: `0.0.0.0`)
+- PORT: Server port (default: `8000`)
+- MAX_UPLOAD_SIZE_MB: Maximum upload file size in megabytes (default: `25`)
 
-## 6. How to Run
+## Running the Application
 
-### 6.1 Launch the FastAPI Web Application
-Start the Uvicorn server:
+### Start the Server
+
 ```bash
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
-- Web Dashboard: Open [http://localhost:8000](http://localhost:8000)
-- Interactive Swagger API Documentation: [http://localhost:8000/docs](http://localhost:8000/docs)
-- Alternative ReDoc Documentation: [http://localhost:8000/redoc](http://localhost:8000/redoc)
 
-### 6.2 Test API via cURL
+- Web Dashboard: http://localhost:8000
+- Interactive API Documentation (Swagger): http://localhost:8000/docs
+- Alternative API Documentation (ReDoc): http://localhost:8000/redoc
+
+### Test with cURL
+
 ```bash
 curl -X POST "http://localhost:8000/predict" \
      -H "accept: application/json" \
      -H "Content-Type: multipart/form-data" \
-     -F "file=@test_road.jpg"
+     -F "file=@road_sample.jpg"
 ```
 
-### 6.3 Run Automated Tests
+### Run Automated Tests
+
+Execute the test suite with pytest:
+
 ```bash
 pytest tests/ -v
 ```
 
----
+## Dataset Preparation and Training
 
-## 7. Model Training & Evaluation
+### Dataset Layout
 
-### 7.1 Dataset Structure
-The dataset follows standard YOLO formatting:
+Datasets must follow the standard YOLO directory organization:
+
 ```
 dataset/
-├── data.yaml
-├── images/
-│   ├── train/  # Training images
-│   ├── val/    # Validation images
-│   └── test/   # Test images
-└── labels/
-    ├── train/  # class_id x_center y_center width height
-    ├── val/
-    └── test/
+  data.yaml
+  images/
+    train/
+    val/
+    test/
+  labels/
+    train/
+    val/
+    test/
 ```
 
-Validate your dataset before training:
+### Validation and Profiling
+
+Run dataset checks before initiating training:
+
 ```bash
 python scripts/validate_dataset.py dataset/data.yaml
 python scripts/dataset_statistics.py dataset
 ```
 
-### 7.2 Fine-Tuning YOLO11
-To fine-tune base YOLO11 on the 4 targeted traffic classes:
+### Fine-Tuning
+
+Train the YOLO11 model on your custom dataset:
+
 ```bash
 python training/train.py --data dataset/data.yaml --model yolo11n.pt --epochs 50 --batch 16 --imgsz 640 --device cpu
 ```
-Upon completion, the best checkpoint is automatically copied to `weights/best.pt`.
 
-### 7.3 Evaluating Against Baseline Target Metrics
+Once training completes, the best checkpoint is saved to `weights/best.pt`. The server automatically loads this checkpoint upon next startup.
+
+### Performance Evaluation
+
+Evaluate the trained checkpoint against the validation split:
+
 ```bash
 python training/evaluate.py --model weights/best.pt --data dataset/data.yaml
 ```
 
----
+The evaluation report is saved in Markdown format to `outputs/reports/`.
 
-## 8. Limitations & Conceptual Boundaries
+## Operational Boundaries and Practical Considerations
 
-1. **Spatial Density vs Temporal Flow**: Raw object counts in a single frame provide an instantaneous measure of spatial occupancy. They do not measure velocity, delay time, or queue discharge rates.
-2. **No Predictive Forecasting**: The model classifies the observed state in the uploaded image; it does not predict future congestion or traffic build-up.
-3. **Heavy Occlusion in Two-Wheelers**: In dense urban traffic, motorcycles riding closely in clusters or partially obscured by buses experience lower recall, as noted in the research report.
-4. **Lighting Variability**: Performance is optimized for daytime urban road footage; severe low-light conditions may degrade detection accuracy without domain-specific data augmentation.
-
----
-
-## 9. Troubleshooting
-
-- **`ModuleNotFoundError: No module named 'ultralytics'`**: Make sure you have activated your virtual environment (`.\.venv\Scripts\Activate.ps1`) before executing scripts.
-- **Port 8000 already in use**: Specify a different port using `--port 8080` or update `PORT=8080` in your `.env` file.
-- **CUDA out of memory**: If running on GPU, reduce `--batch` size from 16 to 8 or 4 in `training/train.py`, or use `--device cpu`.
+- Spatial Occupancy vs. Traffic Flow: Single-frame vehicle counting represents instantaneous spatial density. It does not measure vehicle speed, flow rate, or queue clearance times.
+- Instantaneous Classification: The system reflects conditions at the exact moment an image was captured; it does not forecast future traffic trends.
+- Occlusion in High Density: Two-wheelers travelling in tight clusters or shadowed by large vehicles such as buses may experience lower detection recall.
+- Adverse Environmental Factors: The default models are optimized for daytime road footage. Extreme weather or unlit night conditions may require domain-adapted training data.
