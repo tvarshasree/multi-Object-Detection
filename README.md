@@ -1,35 +1,23 @@
 # Real-Time Traffic Density and Congestion Classification
 
-This repository provides an end-to-end computer vision system for traffic monitoring, object detection, vehicle counting, and road congestion classification. The core system, located in the `traffic-density-classification` directory, uses Ultralytics YOLO11 for object detection and a FastAPI backend with an integrated web dashboard to process roadway imagery in real time.
+This repository provides an end-to-end computer vision and traffic analytics system for roadway monitoring, vehicle detection, object counting, and congestion level classification.
 
-The project detects four primary road-user classes (Person, Car, Bus, and Motorcycle), isolates pedestrian movement from vehicular traffic, and assigns an instantaneous traffic density level (Low, Medium, or High) based on calibrated vehicle counts.
+The repository is structured into two clean modules:
+- `traffic-density-classification/`: The primary production system built with Ultralytics YOLO11 and FastAPI, featuring a real-time web dashboard, heads-up display (HUD) rendering, pedestrian segregation, and three-tier density classification.
+- `baseline-mobilenet-ssd/`: The initial exploratory research prototype built with MobileNetV2 and TensorFlow/Keras on Open Images V6 for two-class object detection.
 
-## Overview of Recent Updates
+## Primary System: TrafficVision (YOLO11 + FastAPI)
 
-The repository has transitioned from an initial two-class prototype into a complete, modular traffic analytics platform:
-
-- Upgraded model backbone to YOLO11 with support for fine-tuned weights and automatic fallback to pretrained weights with COCO class mapping.
-- Expanded detection scope to four dedicated classes: Person, Car, Bus, and Motorcycle.
-- Introduced pedestrian segregation logic so that high pedestrian volumes (e.g., crosswalks, sidewalks) do not trigger false vehicular congestion alerts.
-- Implemented a three-tier traffic density classification engine using calibrated thresholds.
-- Built an asynchronous FastAPI service providing endpoints for health monitoring, model metadata, predictions, and media retrieval.
-- Integrated an OpenCV visual rendering pipeline that outputs class-specific bounding boxes and a top-mounted heads-up display (HUD) status banner.
-- Added a lightweight, responsive web interface for image upload, real-time KPI card display, and annotated result visualization.
-- Created standalone scripts for dataset structure validation, annotation integrity checks, class distribution statistics, and model evaluation against target benchmarks.
-- Added a complete unit and integration test suite covering dataset schemas, counting logic, classification rules, and API endpoints.
-
-## Target Classes and Classification Logic
+The production application resides in `traffic-density-classification`. It detects four road-user classes, isolates pedestrian foot traffic from vehicular volume, and classifies roadway congestion into Low, Medium, or High states.
 
 ### Target Classes
 
-The system focuses strictly on four road-user categories:
-
 - Person (Class 0): Pedestrians, people on foot, and cyclists.
 - Car (Class 1): Sedans, hatchbacks, SUVs, taxis, and vans.
-- Bus (Class 2): Public transport buses and coaches.
+- Bus (Class 2): Public transit buses and coaches.
 - Motorcycle (Class 3): Two-wheelers, scooters, and motorbikes.
 
-### Counting Logic
+### Counting and Segregation Logic
 
 Detections are separated into vehicle and pedestrian counts:
 
@@ -53,10 +41,11 @@ Threshold values (T1 = 5, T2 = 12) are configurable through environment variable
 
 ```
 od/
-  images/                           Sample input images
-  notebooks/                        Historical exploratory notebooks (SSD-MobileNet baseline)
-  src/                              Legacy prototype source files
-  traffic-density-classification/   Current production system
+  requirements.txt                  Root dependencies pointing to production system
+  README.md                         Master repository documentation
+  LICENSE                           Project license
+
+  traffic-density-classification/   Production System (YOLO11 + FastAPI)
     app/
       main.py                       FastAPI application and route wiring
       config.py                     Application settings and environment validation
@@ -94,65 +83,47 @@ od/
       data.yaml                     Dataset configuration for Ultralytics
     weights/
       best.pt                       Target location for fine-tuned weights
-    requirements.txt                Python package dependencies
-    README.md                       Component documentation
-  README.md                         Repository documentation
+    requirements.txt                PyTorch, Ultralytics, and FastAPI dependencies
+    README.md                       Production component documentation
+
+  baseline-mobilenet-ssd/           Research Prototype (MobileNetV2 SSD)
+    notebooks/
+      object_Detection_SSD_mobilenet.ipynb  Jupyter notebook for training and evaluation
+    src/
+      data_preprocessing.py         FiftyOne Open Images V6 ingestion pipeline
+      train.py                      MobileNetV2 transfer learning and SSD head
+      testing.py                    Convergence evaluation and confusion matrix
+      results.py                    Inference and bounding box visualization
+    images/                         Baseline performance curves and confusion matrix
+    requirements.txt                TensorFlow and FiftyOne dependencies
+    README.md                       Baseline documentation and evaluation findings
 ```
 
-## System Requirements
+## Quick Start: Production System
 
-- Operating System: Linux, macOS, or Windows
-- Python: Version 3.10 or higher
-- Hardware: Multi-core CPU; NVIDIA GPU with CUDA support recommended for training and high-throughput inference
+### Prerequisites
 
-## Installation and Setup
+- Python 3.10 or higher
+- pip and virtualenv
 
-All primary application files reside within the `traffic-density-classification` folder.
-
-1. Navigate to the project directory:
+### 1. Installation
 
 ```bash
 cd traffic-density-classification
-```
-
-2. Create a virtual environment:
-
-```bash
 python -m venv .venv
-```
 
-3. Activate the virtual environment:
-
-On Windows (PowerShell):
-```powershell
+# On Windows (PowerShell):
 .\.venv\Scripts\Activate.ps1
-```
 
-On Linux or macOS:
-```bash
+# On Linux or macOS:
 source .venv/bin/activate
-```
 
-4. Upgrade pip and install required dependencies:
-
-```bash
 pip install --upgrade pip
 pip install -r requirements.txt
-```
-
-5. Set up the environment configuration:
-
-```bash
 cp .env.example .env
 ```
 
-The default settings work immediately on CPU. If a CUDA GPU is available, set `DEVICE=0` in `.env`.
-
-## Running the Application
-
-### 1. Start the API and Web Dashboard
-
-Run the server with Uvicorn:
+### 2. Start the Application
 
 ```bash
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
@@ -160,12 +131,10 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
 Once running:
 - Web Dashboard: http://localhost:8000
-- Swagger API Documentation: http://localhost:8000/docs
-- ReDoc API Documentation: http://localhost:8000/redoc
+- Interactive Swagger API Documentation: http://localhost:8000/docs
+- Alternative ReDoc API Documentation: http://localhost:8000/redoc
 
-### 2. Testing via cURL
-
-You can submit an image directly to the prediction endpoint:
+### 3. Test API via cURL
 
 ```bash
 curl -X POST "http://localhost:8000/predict" \
@@ -174,89 +143,22 @@ curl -X POST "http://localhost:8000/predict" \
      -F "file=@sample_road.jpg"
 ```
 
-The response includes:
-- Processing and inference latencies in milliseconds
-- Individual counts for car, bus, motorcycle, and person
-- Total vehicle count and pedestrian count
-- Assigned density level (Low, Medium, or High) with explanatory text
-- URL to retrieve the annotated output image with HUD overlays
-- Bounding box coordinates and confidence scores for each detected object
-
-### 3. Running Automated Tests
-
-Run the full test suite with pytest:
+### 4. Run Automated Tests
 
 ```bash
 pytest tests/ -v
 ```
 
-## Dataset Preparation and Model Training
+## Exploratory Baseline (MobileNetV2 SSD)
 
-### Dataset Structure
+For details on the initial two-class prototype using TensorFlow/Keras and FiftyOne, refer to the [baseline-mobilenet-ssd/README.md](file:///c:/Users/tvars/Documents/patchamomma2026/od/baseline-mobilenet-ssd/README.md).
 
-The training pipeline expects a standard YOLO dataset structure:
+## Operational Boundaries and Practical Considerations
 
-```
-dataset/
-  data.yaml
-  images/
-    train/
-    val/
-    test/
-  labels/
-    train/
-    val/
-    test/
-```
-
-The `data.yaml` file defines the dataset paths and four target classes:
-
-```yaml
-names:
-  0: person
-  1: car
-  2: bus
-  3: motorcycle
-nc: 4
-```
-
-### Dataset Validation
-
-Before starting training, verify the integrity of the dataset:
-
-```bash
-python scripts/validate_dataset.py dataset/data.yaml
-python scripts/dataset_statistics.py dataset
-```
-
-These scripts verify directory structure, image/label pairings, label format validity, bounding box coordinates, and report class distribution counts.
-
-### Fine-Tuning YOLO11
-
-To fine-tune base YOLO11 weights on your traffic dataset:
-
-```bash
-python training/train.py --data dataset/data.yaml --model yolo11n.pt --epochs 50 --batch 16 --imgsz 640 --device cpu
-```
-
-When training completes, the script copies the best checkpoint to `weights/best.pt`. The FastAPI service automatically detects and loads `weights/best.pt` upon startup. If `weights/best.pt` is not present, the service falls back to `yolo11n.pt` with COCO class mapping.
-
-### Evaluating Performance
-
-To evaluate fine-tuned weights against the validation split and generate a performance report:
-
-```bash
-python training/evaluate.py --model weights/best.pt --data dataset/data.yaml
-```
-
-The generated report will be saved to `outputs/reports/`.
-
-## Operational Boundaries and Limitations
-
-1. Single-Frame Spatial Proxy: Frame-level vehicle counts measure instantaneous spatial occupancy. They do not calculate vehicle velocity, queue discharge rates, or travel delay times.
-2. Static Analysis: The system classifies current traffic density from observed visual data; it does not forecast future traffic trends or upstream congestion accumulation.
-3. Occlusion: In dense traffic conditions, motorcycles travelling close together or behind larger vehicles like buses can experience lower detection recall.
-4. Lighting Conditions: The model is tuned for standard daytime urban roadway conditions. Severe rain, fog, or unlit nighttime environments may require additional domain-specific training data.
+1. Spatial Density vs Temporal Flow: Raw vehicle counts in a single frame provide an instantaneous measure of spatial occupancy. They do not calculate velocity, delay time, or queue discharge rates.
+2. Static Analysis: The system classifies visual density from the current frame; it does not forecast future traffic build-up.
+3. Occlusion: In dense traffic, motorcycles travelling close together or behind buses can experience lower detection recall.
+4. Lighting: The model is tuned for standard daytime urban roadway conditions. Nighttime or severe weather may require domain-adapted training data.
 
 ## License
 

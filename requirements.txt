@@ -1,8 +1,4 @@
-tensorflow
-tensorflow-hub
-fiftyone
-opencv-python-headless
-numpy
-matplotlib
-scikit-learn
-pycocotools
+# Default installation targets the production TrafficVision system.
+# For the baseline MobileNet SSD experiment, see baseline-mobilenet-ssd/requirements.txt
+
+-r traffic-density-classification/requirements.txt
