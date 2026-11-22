@@ -3,7 +3,7 @@
 This repository provides an end-to-end computer vision and traffic analytics system for roadway monitoring, vehicle detection, object counting, and congestion level classification.
 
 The repository is structured into two clean modules:
-- `traffic-density-classification/`: The primary production system built with Ultralytics YOLO11 and FastAPI, featuring a real-time web dashboard, heads-up display (HUD) rendering, pedestrian segregation, and three-tier density classification.
+- `traffic-density-classification/`: The primary production system built with Ultralytics YOLO11 and FastAPI, featuring a real-time web dashboard, heads-up display (HUD) rendering, pedestrian segregation, three-tier density classification, and video stream tracking.
 - `baseline-mobilenet-ssd/`: The initial exploratory research prototype built with MobileNetV2 and TensorFlow/Keras on Open Images V6 for two-class object detection.
 
 ## Primary System: TrafficVision (YOLO11 + FastAPI)
@@ -36,6 +36,15 @@ Traffic density is categorized based on the active vehicle count:
 - High: vehicle_count > 12. Heavy vehicular density indicating road congestion.
 
 Threshold values (T1 = 5, T2 = 12) are configurable through environment variables.
+
+## End-to-End Pipeline Architecture
+
+The YOLO11 traffic system is organized into four core pipeline stages:
+
+- Stage 1: Data Engineering Pipeline: Dataset schema formatting in YOLO structure, automated annotation and coordinate integrity checks via `scripts/validate_dataset.py`, and class distribution imbalance analysis via `scripts/dataset_statistics.py`.
+- Stage 2: Training and Experimentation Pipeline: Fine-tuning pipeline (`training/train.py`) supporting YOLO11 backbones (`yolo11n`, `yolo11s`, `yolo11m`), traffic-specific data augmentations, early stopping, and automated benchmark evaluation against target metrics (`training/evaluate.py`).
+- Stage 3: Inference and Serving Pipeline (Currently in Place): Asynchronous FastAPI application (`app/main.py`), singleton in-memory model lifecycle with COCO translation bridge (`app/services/model_service.py`), pedestrian segregation, three-tier classification, OpenCV HUD rendering, and responsive web dashboard (`frontend/index.html`).
+- Stage 4: Video Stream and Tracking Extension (Recommended Enhancement): Multi-object tracking pipeline (`scripts/process_video.py`) using ByteTrack to track persistent vehicle IDs across frames, compute cumulative volume, and calculate rolling-window density over video files or live RTSP streams.
 
 ## Repository Layout
 
@@ -72,6 +81,7 @@ od/
       validate.py                   Validation set evaluation script
       evaluate.py                   Benchmark evaluation and report generator
     scripts/
+      process_video.py              Stage 4 video streaming and ByteTrack tracking pipeline
       validate_dataset.py           Dataset directory and label file validator
       dataset_statistics.py         Class distribution and dataset metrics script
     tests/
@@ -123,7 +133,7 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-### 2. Start the Application
+### 2. Start the Application (Stage 3)
 
 ```bash
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
@@ -143,7 +153,13 @@ curl -X POST "http://localhost:8000/predict" \
      -F "file=@sample_road.jpg"
 ```
 
-### 4. Run Automated Tests
+### 4. Run Video Stream and Tracking (Stage 4)
+
+```bash
+python scripts/process_video.py --source input_traffic.mp4 --output outputs/annotated/tracked_traffic.mp4
+```
+
+### 5. Run Automated Tests
 
 ```bash
 pytest tests/ -v
@@ -155,8 +171,8 @@ For details on the initial two-class prototype using TensorFlow/Keras and FiftyO
 
 ## Operational Boundaries and Practical Considerations
 
-1. Spatial Density vs Temporal Flow: Raw vehicle counts in a single frame provide an instantaneous measure of spatial occupancy. They do not calculate velocity, delay time, or queue discharge rates.
-2. Static Analysis: The system classifies visual density from the current frame; it does not forecast future traffic build-up.
+1. Spatial Density vs Temporal Flow: Raw vehicle counts in a single frame provide an instantaneous measure of spatial occupancy. They do not calculate velocity, delay time, or queue discharge rates without active tracking.
+2. Static Analysis: The system classifies visual density from the current frame; use Stage 4 video tracking for rolling-window temporal smoothing.
 3. Occlusion: In dense traffic, motorcycles travelling close together or behind buses can experience lower detection recall.
 4. Lighting: The model is tuned for standard daytime urban roadway conditions. Nighttime or severe weather may require domain-adapted training data.
 

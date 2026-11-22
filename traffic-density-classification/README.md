@@ -1,6 +1,6 @@
 # TrafficVision: Real-Time Traffic Density and Congestion Classification
 
-TrafficVision is a vision-based traffic monitoring and density classification system built with Ultralytics YOLO11 and FastAPI. It processes roadway images to detect key road users, separate pedestrian counts from vehicular traffic, and classify overall traffic congestion into Low, Medium, or High states.
+TrafficVision is a vision-based traffic monitoring and density classification system built with Ultralytics YOLO11 and FastAPI. It processes roadway imagery to detect key road users, separate pedestrian counts from vehicular traffic, and classify overall traffic congestion into Low, Medium, or High states.
 
 ## Key Features
 
@@ -11,6 +11,7 @@ TrafficVision is a vision-based traffic monitoring and density classification sy
 - Modular FastAPI Service: Provides REST endpoints for health checks, model metadata, image inference, and annotated image retrieval.
 - OpenCV Visualization: Generates annotated output images with class-colored bounding boxes and a top heads-up display (HUD) banner showing active counts and status.
 - Web Dashboard: Includes a responsive browser interface for drag-and-drop image uploads, live KPI cards, and instant visual feedback.
+- Video Tracking Capability: Supports video file and RTSP stream processing with persistent vehicle tracking IDs via ByteTrack.
 - Dataset and Evaluation Tools: Provides validation and statistics scripts for YOLO-formatted datasets, training workflows, and report generation.
 - Automated Tests: Contains unit and integration tests for API endpoints, counting logic, classification rules, and dataset formatting.
 
@@ -42,17 +43,33 @@ Traffic density is assigned using the following rules:
 
 The threshold values (T1 = 5, T2 = 12) can be adjusted in the environment configuration.
 
-## System Architecture
+## End-to-End Pipeline Architecture
 
-The request workflow follows a sequential, modular pipeline:
+The system is organized into four core pipeline stages:
 
-1. Client Request: An image is submitted via the web dashboard or directly to the `/predict` endpoint.
-2. Validation: The upload is checked for allowed image types (JPEG, PNG, WebP), file size limits, and basic integrity.
-3. Inference: The YOLO11 model detects objects and returns bounding boxes, class labels, and confidence scores.
-4. Counting and Segregation: Detected objects are split into pedestrian and vehicle counts.
-5. Density Classification: The vehicle count is evaluated against configured thresholds to assign a congestion level.
-6. HUD Rendering: OpenCV draws high-contrast bounding boxes and superimposes a top HUD banner with status and metrics.
-7. Response: The API returns structured JSON metrics along with a URL pointing to the annotated image.
+### Stage 1: Data Engineering Pipeline
+- Sourcing: Formatted for standard YOLO datasets (train, val, test splits) across the 4 target classes.
+- Quality Gate: Before training, `scripts/validate_dataset.py` inspects image files and label pairs, ensuring normalized bounding box coordinates and valid class IDs.
+- Distribution Profiling: `scripts/dataset_statistics.py` analyzes class frequency to detect data imbalances between vehicle types.
+
+### Stage 2: Training and Experimentation Pipeline
+- Backbone Selection: Supports YOLO11 variants (`yolo11n.pt` for speed, `yolo11s.pt` or `yolo11m.pt` for complex scenes with small distant vehicles).
+- Domain Augmentation: Training employs horizontal flipping, spatial translation, scale jitter, and HSV color augmentation to handle lighting and weather changes, while vertical flipping is disabled.
+- Checkpoint Promotion: Model fine-tuning via `training/train.py` automatically evaluates convergence and exports the best performing checkpoint to `weights/best.pt`.
+- Validation Gate: `training/evaluate.py` verifies model performance against target benchmarks (Precision, Recall, mAP@0.5) and generates reproducibility reports.
+
+### Stage 3: Inference and Serving Pipeline (Currently in Place)
+- Web Service: FastAPI application (`app/main.py`) running asynchronously via Uvicorn.
+- Model Management: Singleton lifecycle (`app/services/model_service.py`) prevents reloading weights between requests and supports dynamic COCO class translation.
+- Pipeline Orchestration: `app/services/detection_service.py` coordinates image validation, inference, vehicle/pedestrian segregation, and 3-tier density classification.
+- Visual Delivery: OpenCV (`app/utils/image_utils.py`) renders high-contrast bounding boxes and superimposes a top HUD banner with real-time KPI metrics.
+- User Dashboard: Static frontend (`frontend/index.html`) provides drag-and-drop file ingestion, live status cards, and visual previews.
+
+### Stage 4: Video Stream and Tracking Extension (Recommended Enhancement)
+- Sequential Processing: `scripts/process_video.py` extends image inference to recorded video files and live RTSP camera feeds.
+- Multi-Object Tracking: Integrates ByteTrack to assign persistent IDs (`#track_id`) to road users across consecutive frames.
+- Cumulative Counting: Tracks total unique vehicles and pedestrians entering the camera frame rather than counting only per-frame instances.
+- Temporal Smoothing: Averages vehicle density over a rolling window to prevent momentary red-light pauses from triggering false congestion state changes.
 
 ## Directory Structure
 
@@ -84,6 +101,7 @@ traffic-density-classification/
     validate.py                   Validation dataset evaluation script
     evaluate.py                   Benchmark evaluation and report generator
   scripts/
+    process_video.py              Stage 4 video streaming and ByteTrack tracking pipeline
     validate_dataset.py           Dataset structure and annotation validator
     dataset_statistics.py         Class distribution and dataset metrics
   tests/
@@ -105,7 +123,7 @@ traffic-density-classification/
 
 - Python 3.10 or higher
 - pip and virtualenv
-- Optional: CUDA-compatible GPU for accelerated training and inference
+- Optional: CUDA-compatible GPU for accelerated training and video inference
 
 ### 1. Create and Activate Virtual Environment
 
@@ -151,7 +169,7 @@ Available environment variables:
 
 ## Running the Application
 
-### Start the Server
+### 1. Start the API and Web Dashboard (Stage 3)
 
 ```bash
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
@@ -161,7 +179,7 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 - Interactive API Documentation (Swagger): http://localhost:8000/docs
 - Alternative API Documentation (ReDoc): http://localhost:8000/redoc
 
-### Test with cURL
+### 2. Test Single Image via cURL
 
 ```bash
 curl -X POST "http://localhost:8000/predict" \
@@ -170,7 +188,21 @@ curl -X POST "http://localhost:8000/predict" \
      -F "file=@road_sample.jpg"
 ```
 
-### Run Automated Tests
+### 3. Run Video Stream and Tracking Pipeline (Stage 4)
+
+To process a roadway video file or live camera feed with ByteTrack tracking:
+
+```bash
+python scripts/process_video.py --source input_traffic.mp4 --output outputs/annotated/tracked_traffic.mp4 --conf 0.35
+```
+
+For live webcam or RTSP stream:
+```bash
+python scripts/process_video.py --source 0
+python scripts/process_video.py --source "rtsp://camera_ip:port/stream"
+```
+
+### 4. Run Automated Tests
 
 Execute the test suite with pytest:
 
@@ -178,7 +210,7 @@ Execute the test suite with pytest:
 pytest tests/ -v
 ```
 
-## Dataset Preparation and Training
+## Dataset Preparation and Training (Stages 1 and 2)
 
 ### Dataset Layout
 
@@ -197,7 +229,7 @@ dataset/
     test/
 ```
 
-### Validation and Profiling
+### Validation and Profiling (Stage 1)
 
 Run dataset checks before initiating training:
 
@@ -206,7 +238,7 @@ python scripts/validate_dataset.py dataset/data.yaml
 python scripts/dataset_statistics.py dataset
 ```
 
-### Fine-Tuning
+### Fine-Tuning (Stage 2)
 
 Train the YOLO11 model on your custom dataset:
 
@@ -216,7 +248,7 @@ python training/train.py --data dataset/data.yaml --model yolo11n.pt --epochs 50
 
 Once training completes, the best checkpoint is saved to `weights/best.pt`. The server automatically loads this checkpoint upon next startup.
 
-### Performance Evaluation
+### Performance Evaluation (Stage 2)
 
 Evaluate the trained checkpoint against the validation split:
 
@@ -228,7 +260,7 @@ The evaluation report is saved in Markdown format to `outputs/reports/`.
 
 ## Operational Boundaries and Practical Considerations
 
-- Spatial Occupancy vs. Traffic Flow: Single-frame vehicle counting represents instantaneous spatial density. It does not measure vehicle speed, flow rate, or queue clearance times.
-- Instantaneous Classification: The system reflects conditions at the exact moment an image was captured; it does not forecast future traffic trends.
+- Spatial Occupancy vs. Traffic Flow: Single-frame vehicle counting represents instantaneous spatial density. It does not measure vehicle speed, flow rate, or queue clearance times without active tracking.
+- Instantaneous Classification: Single-image analysis reflects conditions at the exact moment an image was captured; use Stage 4 video tracking for rolling-window temporal smoothing.
 - Occlusion in High Density: Two-wheelers travelling in tight clusters or shadowed by large vehicles such as buses may experience lower detection recall.
 - Adverse Environmental Factors: The default models are optimized for daytime road footage. Extreme weather or unlit night conditions may require domain-adapted training data.
