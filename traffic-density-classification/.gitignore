@@ -55,3 +55,7 @@ htmlcov/
 
 # Ultralytics local cache
 .ultralytics/
+
+# Temporary Roadmap Document (Not to be committed)
+ROADMAP_ADVANCEMENTS.md
+ROADMAP_*.md
